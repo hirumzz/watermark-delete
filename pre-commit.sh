@@ -15,7 +15,7 @@ for file in $staged_files; do
     if [ -f "$file" ]; then
         # For markdown files, inspect for high-fidelity secret signatures or private keys
         if echo "$file" | grep -q '\.md$'; then
-            if grep -Ei "$PRIVATE_KEY_HEADER" "$file" > /dev/null || \
+            if grep -Ei -- "$PRIVATE_KEY_HEADER" "$file" > /dev/null || \
                grep -Ei "$HIGH_ENTROPY_KEY_ASSIGNMENT" "$file" > /dev/null; then
                 echo "=========================================================="
                 echo "COMMIT BLOCKED: Actual credentials/private key found in markdown: $file"
@@ -29,7 +29,7 @@ for file in $staged_files; do
             if ! echo "$file" | grep -qE '(example|readme|pre-commit)'; then
                 GENERIC_PATTERN="private_key|api_key|client_secret|db_password|aws_access_key|aws_secret|bearer"
                 if grep -Ei "($GENERIC_PATTERN)" "$file" > /dev/null || \
-                   grep -Ei "$PRIVATE_KEY_HEADER" "$file" > /dev/null; then
+                   grep -Ei -- "$PRIVATE_KEY_HEADER" "$file" > /dev/null; then
                     echo "=========================================================="
                     echo "COMMIT BLOCKED: Potential secret keyword or private key found in source: $file"
                     echo "Please verify and remove raw credentials."
