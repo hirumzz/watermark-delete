@@ -54,62 +54,97 @@ def detect_and_remove_watermark(image_path: str, output_path: str):
     # 1. Convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # 2. Heuristic: Apply Canny edge detection
-    edges = cv2.Canny(gray, 40, 150)
-
-    # 3. Morphological closing to group text elements/letters
-    # Using a rectangular structuring element (horizontal structure for lines/text)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 6))
-    closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
-
-    # 4. Find contours
-    contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Generate binary mask of potential watermark areas
-    mask = np.zeros((h, w), dtype=np.uint8)
-    watermark_found = False
-
-    # Watermarks are typically located near the borders/margins (outer 15%)
+    # Define margins (outer 15%)
     margin_x = int(w * 0.15)
     margin_y = int(h * 0.15)
 
-    for cnt in contours:
-        x, y, w_cnt, h_cnt = cv2.boundingRect(cnt)
+    # Initialize final binary mask for inpainted areas
+    mask = np.zeros((h, w), dtype=np.uint8)
+    watermark_found = False
 
-        # Skip tiny noise or massive layers
-        area = w_cnt * h_cnt
-        if area < 80 or area > (h * w * 0.10):
-            continue
+    # 2. Heuristic: Scan at multiple threshold levels to handle varying transparency/backgrounds
+    thresholds = [100, 130, 160, 190]
+    for thresh_val in thresholds:
+        _, thresh = cv2.threshold(gray, thresh_val, 255, cv2.THRESH_BINARY)
 
-        # Check if the contour is located within the outer margins (top, bottom, left, or right)
-        is_near_margin = (
-            (x < margin_x) or 
-            (y < margin_y) or 
-            (x + w_cnt > w - margin_x) or 
-            (y + h_cnt > h - margin_y)
-        )
+        # Morphological closing to group shapes/letters
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 
-        if not is_near_margin:
-            continue
+        # Find contours
+        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # Draw bounding box onto mask with small padding
-        padding = 3
-        x1 = max(0, x - padding)
-        y1 = max(0, y - padding)
-        x2 = min(w, x + w_cnt + padding)
-        y2 = min(h, y + h_cnt + padding)
+        for cnt in contours:
+            x, y, w_cnt, h_cnt = cv2.boundingRect(cnt)
+            area = cv2.contourArea(cnt)
+            bbox_area = w_cnt * h_cnt
 
-        cv2.rectangle(mask, (x1, y1), (x2, y2), 255, -1)
-        watermark_found = True
+            # Filters:
+            # - Ignore tiny noise by setting min bounding area to 200px
+            # - Ignore massive segments (backgrounds/walls) by setting max area to 5% of image
+            if bbox_area < 200 or bbox_area > (h * w * 0.05):
+                continue
 
-    # 5. Restore original image via inpainting if watermark overlays were found
+            # Limit width & height of watermarks (watermark overlays are compact)
+            if w_cnt > (w * 0.15) or h_cnt > (h * 0.10):
+                continue
+
+            # Location filter: restrict to horizontal margins or corners
+            # This completely avoids middle-left or middle-right wall texture smudging
+            is_in_top_margin = y < margin_y
+            is_in_bottom_margin = y + h_cnt > h - margin_y
+            is_in_top_left_corner = x < margin_x and y < int(margin_y * 1.5)
+            is_in_bottom_left_corner = x < margin_x and y + h_cnt > h - int(margin_y * 1.5)
+            is_in_top_right_corner = x + w_cnt > w - margin_x and y < int(margin_y * 1.5)
+            is_in_bottom_right_corner = x + w_cnt > w - margin_x and y + h_cnt > h - int(margin_y * 1.5)
+
+            is_valid_location = (
+                is_in_top_margin or 
+                is_in_bottom_margin or 
+                is_in_top_left_corner or 
+                is_in_bottom_left_corner or 
+                is_in_top_right_corner or 
+                is_in_bottom_right_corner
+            )
+
+            if not is_valid_location:
+                continue
+
+            # Solidity filter (watermark characters/logos are reasonably solid shapes)
+            hull = cv2.convexHull(cnt)
+            hull_area = cv2.contourArea(hull)
+            solidity = float(area) / hull_area if hull_area > 0 else 0
+            if solidity < 0.4:
+                continue
+
+            # Aspect ratio check (filters out long line artifacts like rails or stairs)
+            aspect_ratio = float(w_cnt) / h_cnt
+            if aspect_ratio < 0.2 or aspect_ratio > 5.0:
+                continue
+
+            # Verify contrast inside the region (watermarks have high local contrast)
+            roi = gray[y:y+h_cnt, x:x+w_cnt]
+            min_val, max_val, _, _ = cv2.minMaxLoc(roi)
+            if (max_val - min_val) < 40:
+                continue
+
+            # Draw onto mask with a small padding to guarantee full eraser coverage
+            padding = 4
+            x1 = max(0, x - padding)
+            y1 = max(0, y - padding)
+            x2 = min(w, x + w_cnt + padding)
+            y2 = min(h, y + h_cnt + padding)
+
+            cv2.rectangle(mask, (x1, y1), (x2, y2), 255, -1)
+            watermark_found = True
+
+    # 3. Restore image via Navier-Stokes/Telea inpainting
     if watermark_found:
-        # Inpaint with small radius (3px) to prevent smudging details
         restored = cv2.inpaint(img, mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
     else:
         restored = img.copy()
 
-    # Save output file (bilateral filter completely removed to retain original sharpness)
+    # Save output file
     success = cv2.imwrite(output_path, restored)
     if not success:
         raise ValueError(f"Failed to write output image to {output_path}")
