@@ -12,6 +12,7 @@ export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [activePreviewUrl, setActivePreviewUrl] = useState(null);
 
   const fileInputRef = useRef(null);
   const pollTimerRef = useRef(null);
@@ -337,7 +338,11 @@ export default function App() {
           <div className="preview-grid">
             {files.map((file) => (
               <div className="preview-card" key={file.id}>
-                <div className="preview-image-wrapper">
+                <div 
+                  className="preview-image-wrapper"
+                  onClick={() => setActivePreviewUrl((file.status === 'DONE' && file.downloadUrl) ? file.downloadUrl : file.preview)}
+                  title="Click to view full image"
+                >
                   <img 
                     src={(file.status === 'DONE' && file.downloadUrl) ? file.downloadUrl : file.preview} 
                     alt={file.name} 
@@ -378,6 +383,18 @@ export default function App() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {activePreviewUrl && (
+        <div className="image-modal-overlay" onClick={() => setActivePreviewUrl(null)}>
+          <button className="image-modal-close" onClick={() => setActivePreviewUrl(null)}>&times;</button>
+          <img 
+            src={activePreviewUrl} 
+            alt="Fullscreen preview" 
+            className="image-modal-content" 
+            onClick={(e) => e.stopPropagation()} 
+          />
         </div>
       )}
     </div>
