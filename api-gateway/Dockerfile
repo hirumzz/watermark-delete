@@ -18,10 +18,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o gateway .
 # Production stage
 FROM alpine:3.19
 
+WORKDIR /app
+
+# Create shared storage directory and chown to nobody (65534:65534) for volume permissions
+RUN mkdir -p /app/shared-storage && chown -R 65534:65534 /app/shared-storage
+
 # Security: run as non-root user
 USER nobody
-
-WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /build/gateway /app/gateway

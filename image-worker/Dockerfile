@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY app/ ./app/
 
+# Create shared storage directory and chown to nobody (65534:65534) for volume permissions
+RUN mkdir -p /app/shared-storage && chown -R 65534:65534 /app/shared-storage
+
 # Security: Run as non-root user
 USER nobody
 
