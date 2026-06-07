@@ -27,10 +27,10 @@ services:
     volumes:
       - shared-storage:/app/shared-storage
     environment:
-      - PORT=8080
-      - REDIS_ADDR=redis:6379
-      - STORAGE_DIR=/app/shared-storage
-      - DOWNLOAD_SIGNING_SECRET=secure-production-ready-signature-secret-key-98765
+      - PORT=${PORT:-8080}
+      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
+      - STORAGE_DIR=${STORAGE_DIR:-/app/shared-storage}
+      - DOWNLOAD_SIGNING_SECRET=${DOWNLOAD_SIGNING_SECRET:-secure-production-ready-signature-secret-key-98765}
     networks:
       - public-net
       - private-net
@@ -50,8 +50,8 @@ services:
     volumes:
       - shared-storage:/app/shared-storage
     environment:
-      - REDIS_ADDR=redis:6379
-      - STORAGE_DIR=/app/shared-storage
+      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
+      - STORAGE_DIR=${STORAGE_DIR:-/app/shared-storage}
     networks:
       - private-net
     deploy:
