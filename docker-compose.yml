@@ -1,0 +1,85 @@
+services:
+  frontend-service:
+    build:
+      context: ./frontend-service
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+    networks:
+      - public-net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+    restart: on-failure
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+    volumes:
+      - shared-storage:/app/shared-storage
+    environment:
+      - PORT=8080
+      - REDIS_ADDR=redis:6379
+      - STORAGE_DIR=/app/shared-storage
+      - DOWNLOAD_SIGNING_SECRET=secure-production-ready-signature-secret-key-98765
+    networks:
+      - public-net
+      - private-net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+    restart: on-failure
+
+  image-worker:
+    build:
+      context: ./image-worker
+      dockerfile: Dockerfile
+    depends_on:
+      - redis
+    volumes:
+      - shared-storage:/app/shared-storage
+    environment:
+      - REDIS_ADDR=redis:6379
+      - STORAGE_DIR=/app/shared-storage
+    networks:
+      - private-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: on-failure
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    networks:
+      - private-net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+    restart: on-failure
+
+volumes:
+  shared-storage:
+
+networks:
+  public-net:
+    driver: bridge
+  private-net:
+    driver: bridge
+    # Security: internal: true disables outbound internet access (no default route)
+    internal: true
