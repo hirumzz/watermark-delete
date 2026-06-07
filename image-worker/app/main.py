@@ -69,20 +69,31 @@ def detect_and_remove_watermark(image_path: str, output_path: str):
     mask = np.zeros((h, w), dtype=np.uint8)
     watermark_found = False
 
+    # Watermarks are typically located near the borders/margins (outer 15%)
+    margin_x = int(w * 0.15)
+    margin_y = int(h * 0.15)
+
     for cnt in contours:
         x, y, w_cnt, h_cnt = cv2.boundingRect(cnt)
 
-        # Heuristic filters:
-        # - Exclude tiny noise elements
-        # - Exclude huge objects (e.g. background layers)
-        # - Watermarks are frequently text overlays or logo stamps (aspect ratios, location filters)
+        # Skip tiny noise or massive layers
         area = w_cnt * h_cnt
-        if area < 80 or area > (h * w * 0.15):
+        if area < 80 or area > (h * w * 0.10):
             continue
 
-        # Watermark text is typically located near the borders or margins (though we check everywhere)
-        # Draw bounding boxes onto mask with small padding
-        padding = 4
+        # Check if the contour is located within the outer margins (top, bottom, left, or right)
+        is_near_margin = (
+            (x < margin_x) or 
+            (y < margin_y) or 
+            (x + w_cnt > w - margin_x) or 
+            (y + h_cnt > h - margin_y)
+        )
+
+        if not is_near_margin:
+            continue
+
+        # Draw bounding box onto mask with small padding
+        padding = 3
         x1 = max(0, x - padding)
         y1 = max(0, y - padding)
         x2 = min(w, x + w_cnt + padding)
@@ -93,17 +104,13 @@ def detect_and_remove_watermark(image_path: str, output_path: str):
 
     # 5. Restore original image via inpainting if watermark overlays were found
     if watermark_found:
-        # INPAINT_TELEA is robust, preserving details without heavy computational bottlenecks
-        restored = cv2.inpaint(img, mask, inpaintRadius=5, flags=cv2.INPAINT_TELEA)
+        # Inpaint with small radius (3px) to prevent smudging details
+        restored = cv2.inpaint(img, mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
     else:
         restored = img.copy()
 
-    # 6. Apply user-authorized image enhancement / noise removal
-    # Bilateral filter is used for high-fidelity smoothing while keeping edges sharp
-    enhanced = cv2.bilateralFilter(restored, d=9, sigmaColor=75, sigmaSpace=75)
-
-    # Write output file
-    success = cv2.imwrite(output_path, enhanced)
+    # Save output file (bilateral filter completely removed to retain original sharpness)
+    success = cv2.imwrite(output_path, restored)
     if not success:
         raise ValueError(f"Failed to write output image to {output_path}")
 

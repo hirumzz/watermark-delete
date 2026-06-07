@@ -338,7 +338,11 @@ export default function App() {
             {files.map((file) => (
               <div className="preview-card" key={file.id}>
                 <div className="preview-image-wrapper">
-                  <img src={file.preview} alt={file.name} className="preview-image" />
+                  <img 
+                    src={(file.status === 'DONE' && file.downloadUrl) ? file.downloadUrl : file.preview} 
+                    alt={file.name} 
+                    className="preview-image" 
+                  />
                 </div>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
